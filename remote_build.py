@@ -12,6 +12,9 @@ for name, expected in manifest.items():
     if actual != expected:
         raise SystemExit(f'Input verification failed: {name}')
 print(f'Verified {len(manifest)} input files.', flush=True)
+overrides = root / 'profiles/010018E011D92000/shader_map.tsv.conflicts.tsv'
+if not overrides.exists():
+    overrides.write_text('# No manual shader source overrides for this new profile.\n')
 env = dict(os.environ, DM_GAME='010018E011D92000', GAME='010018E011D92000',
            DM_GAMES_DIR=str(root / 'profiles'), DM_GAMES_FIRST='1',
            DM_ROOT=str(root), WORK=str(root / 'tmp'),
