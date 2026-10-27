@@ -1,10 +1,17 @@
 name: Build Legends Z-A in parallel
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: macos-26
+        options:
+          - macos-26
+          - xcode-27
 permissions:
   contents: write
 concurrency:
-  group: za-parallel-build
+  group: za-parallel-${{ inputs.runner }}
   cancel-in-progress: false
 jobs:
   prepare:
@@ -12,6 +19,7 @@ jobs:
     with:
       mode: prepare
       asset: inputs.7z
+      runner: ${{ inputs.runner }}
     secrets: inherit
   shaders:
     needs: prepare
@@ -25,6 +33,7 @@ jobs:
       mode: shard
       asset: parallel-inputs.7z
       shard: ${{ matrix.shard }}
+      runner: ${{ inputs.runner }}
     secrets: inherit
   merge:
     needs: shaders
@@ -32,4 +41,5 @@ jobs:
     with:
       mode: merge
       asset: parallel-inputs.7z
+      runner: ${{ inputs.runner }}
     secrets: inherit
