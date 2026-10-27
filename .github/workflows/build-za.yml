@@ -1,0 +1,67 @@
+name: Build Legends Z-A iPhone shell
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: iphone-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify unpublished release and download encrypted input
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern inputs.7z --dir "$RUNNER_TEMP"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install xcodegen zstd spirv-cross glslang sevenzip
+          brew install --cask dotnet-sdk
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lz4 capstone fonttools backports.zstd
+          if ! xcrun -sdk iphoneos metal --version; then xcodebuild -downloadComponent MetalToolchain; fi
+      - name: Decrypt inputs and fetch pinned source
+        run: |
+          set -euo pipefail
+          7zz x "$RUNNER_TEMP/inputs.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          git clone --no-checkout https://github.com/seedds/nxnative.git "$RUNNER_TEMP/nxnative"
+          git -C "$RUNNER_TEMP/nxnative" checkout 15805ef52578afe54196504e3f98e15a22221664
+      - name: Compile shaders and unsigned app
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/venv/bin/python" remote_build_za.py "$RUNNER_TEMP/nxnative" "$RUNNER_TEMP/input" 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Encrypt compiled shell and keep it unpublished
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/input"
+          shasum -a 256 Shell.ipa > Shell.sha256
+          7zz a -t7z -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/result.7z" Shell.ipa Shell.sha256 >/dev/null
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/result.7z" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Save build diagnostics
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/build.log" ]; then
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/build.log" --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+
