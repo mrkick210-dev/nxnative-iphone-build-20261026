@@ -1,0 +1,36 @@
+name: Repair memory helper authentication
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  helper:
+    runs-on: xcode-27
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Fetch pinned official source
+        run: |
+          git clone https://github.com/hugeBlack/GetMoreRam.git helper
+          git -C helper checkout 52f5e964cf262dd1b8f4a1b93cde22b79a1fdd3f
+          git -C helper submodule update --init --recursive
+          python3 repair_memory_helper.py
+      - name: Build corrected helper only
+        run: |
+          set -euo pipefail
+          xcodebuild -project helper/GetMoreRam.xcodeproj -scheme GetMoreRam -sdk iphoneos -arch arm64 -configuration Release -derivedDataPath "$RUNNER_TEMP/derived" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/helper-build.log" 2>&1 || { tail -100 "$RUNNER_TEMP/helper-build.log"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          cp -R "$RUNNER_TEMP/derived/Build/Products/Release-iphoneos/GetMoreRam.app" "$RUNNER_TEMP/package/Payload/"
+          /usr/libexec/PlistBuddy -c 'Set :UIFileSharingEnabled true' "$RUNNER_TEMP/package/Payload/GetMoreRam.app/Info.plist" || /usr/libexec/PlistBuddy -c 'Add :UIFileSharingEnabled bool true' "$RUNNER_TEMP/package/Payload/GetMoreRam.app/Info.plist"
+          cd "$RUNNER_TEMP/package"
+          zip -qry "$GITHUB_WORKSPACE/GetMoreRam-AuthRepair.ipa" Payload
+          shasum -a 256 "$GITHUB_WORKSPACE/GetMoreRam-AuthRepair.ipa" > "$GITHUB_WORKSPACE/GetMoreRam-AuthRepair.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-helper-auth-repair
+          path: |
+            GetMoreRam-AuthRepair.ipa
+            GetMoreRam-AuthRepair.sha256
+          retention-days: 3
