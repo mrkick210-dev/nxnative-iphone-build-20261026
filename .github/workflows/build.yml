@@ -29,6 +29,9 @@ jobs:
           set -euo pipefail
           test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern inputs.7z --dir "$RUNNER_TEMP"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
       - name: Install build dependencies
         run: |
           set -euo pipefail
