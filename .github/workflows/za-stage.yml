@@ -1,0 +1,69 @@
+name: Legends Z-A compilation stage
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+      asset:
+        required: true
+        type: string
+      shard:
+        default: -1
+        type: number
+    secrets:
+      INPUT_PASSWORD:
+        required: true
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      RELEASE_TAG: za-build-input
+      BUNDLE_ASSET: ${{ inputs.asset }}
+      MODE: ${{ inputs.mode }}
+      SHARD: ${{ inputs.shard }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install xcodegen zstd spirv-cross glslang sevenzip
+          brew install --cask dotnet-sdk
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lz4 capstone fonttools backports.zstd
+          if ! xcrun -sdk iphoneos metal --version; then xcodebuild -downloadComponent MetalToolchain; fi
+      - name: Fetch verified encrypted inputs and pinned source
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BUNDLE_ASSET" --dir "$RUNNER_TEMP"
+          7zz x "$RUNNER_TEMP/$BUNDLE_ASSET" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          git clone --no-checkout https://github.com/seedds/nxnative.git "$RUNNER_TEMP/nxnative"
+          git -C "$RUNNER_TEMP/nxnative" checkout 15805ef52578afe54196504e3f98e15a22221664
+      - name: Compile and verify stage
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/venv/bin/python" parallel_za.py "$MODE" "$RUNNER_TEMP/nxnative" "$RUNNER_TEMP/input" "$SHARD" 2>&1 | tee "$RUNNER_TEMP/stage.log"
+      - name: Save stage diagnostics unpublished
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/stage.log" ]; then
+            NAME="parallel-$MODE-$SHARD.log"
+            if [ "$MODE" = merge ]; then NAME=build-parallel.log; fi
+            cp "$RUNNER_TEMP/stage.log" "$RUNNER_TEMP/$NAME"
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$NAME" --repo "$GITHUB_REPOSITORY" --clobber
+          fi

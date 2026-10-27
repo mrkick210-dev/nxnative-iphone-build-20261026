@@ -1,0 +1,35 @@
+name: Build Legends Z-A in parallel
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: za-parallel-build
+  cancel-in-progress: false
+jobs:
+  prepare:
+    uses: ./.github/workflows/za-stage.yml
+    with:
+      mode: prepare
+      asset: inputs.7z
+    secrets: inherit
+  shaders:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3]
+    uses: ./.github/workflows/za-stage.yml
+    with:
+      mode: shard
+      asset: parallel-inputs.7z
+      shard: ${{ matrix.shard }}
+    secrets: inherit
+  merge:
+    needs: shaders
+    uses: ./.github/workflows/za-stage.yml
+    with:
+      mode: merge
+      asset: parallel-inputs.7z
+    secrets: inherit
