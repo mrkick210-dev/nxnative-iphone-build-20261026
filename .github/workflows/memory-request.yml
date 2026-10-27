@@ -1,0 +1,39 @@
+name: Prepare Legends Z-A memory request
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sign-request:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Prepare verified standard entitlement request
+        run: |
+          set -euo pipefail
+          brew install sevenzip
+          test "$(gh release view za-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download za-build-input --repo "$GITHUB_REPOSITORY" --pattern result-parallel.7z --dir "$RUNNER_TEMP"
+          7zz x "$RUNNER_TEMP/result-parallel.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          python3 memory_request.py "$RUNNER_TEMP/input" 2>&1 | tee "$RUNNER_TEMP/memory-request.log"
+          cd "$RUNNER_TEMP/input"
+          7zz a -t7z -mhe=on -mx=1 "-p$INPUT_PASSWORD" "$RUNNER_TEMP/memory-request.7z" MemoryRequest.ipa MemoryRequest.sha256 >/dev/null
+          test "$(gh release view za-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload za-build-input "$RUNNER_TEMP/memory-request.7z" "$RUNNER_TEMP/memory-request.log" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Save diagnostics
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/memory-request.log" ]; then
+            test "$(gh release view za-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+            gh release upload za-build-input "$RUNNER_TEMP/memory-request.log" --repo "$GITHUB_REPOSITORY" --clobber
+          fi
