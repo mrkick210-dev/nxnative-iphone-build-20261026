@@ -20,7 +20,7 @@ env = dict(os.environ, DM_GAME='010018E011D92000', GAME='010018E011D92000',
 env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env['PATH']
 (root / 'tmp').mkdir(exist_ok=True)
 subprocess.run([sys.executable, str(repo / 'dm/gfx/tools/dmsh_chain.py'), '--header'], env=env, check=True)
-subprocess.run([sys.executable, str(repo / 'dm/gfx/tools/dmsh_build.py'),
+subprocess.run([sys.executable, str(repo / 'dm/gfx/tools/own_compilers.py'),
                 str(root / 'shader/pkg'), str(root / 'mac-shaders')], env=env, check=True)
 env.update(W=str(root / 'ipa-work'), PATCHED=str(root / 'patched'),
            ROMFS=str(root / 'data/RomFS'), MSL_IOS=str(root / 'ios'),
