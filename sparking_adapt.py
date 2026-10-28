@@ -6,6 +6,13 @@ PATCHES='''# Sparking ZERO 2.0.73: UE4 FMallocBinned3 reserves 37 GiB of sparse 
 CUTS = {'7b53433fa04477fc8a540bd80d5ce665': [
  (0x1dd0030, 'a3740194', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
  (0x1dd0548, '5d730194', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
+],
+# SDK 14.3.0 AddressRegionManager constructor: the limit and occupied node
+# span are the same pair as SDK 13/19's registered 62-MiB node-area cuts.
+# Original instructions and both surrounding stores verified in this build.
+'2aef2cffb104ee7c9e212fd2f4c731e9': [
+ (0x12d8b0, '08fca752', '087ca052', 'AddressRegionManager node-area limit: 1 GiB -> 62 MiB'),
+ (0x12d94c, '09fca752', '097ca052', 'AddressRegionManager occupied node area: 1 GiB -> 62 MiB'),
 ]}
 OBS = {'7b53433fa04477fc8a540bd80d5ce665': [
  (0x1dd0034, 21, 'f9035293', 'Install host allocator in x19 before publishing GMalloc'),

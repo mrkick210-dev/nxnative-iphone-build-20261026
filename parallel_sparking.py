@@ -24,6 +24,9 @@ if mode=='prepare':
     # Reuse the completed code rewrite; shader packages were extracted and verified locally.
     from sparking_adapt import apply
     apply(repo,profile)
+    # Only the SDK's new, build-gated node-area cuts affect its rewrite.
+    # Main's four allocator instructions remain identical to the verified rewrite.
+    run([sys.executable,repo/'dm/tools/patch_nso.py',root/'original/ExeFS/sdk',root/'patched','sdk'])
     sys.path.insert(0,str(repo/'dm/games'));import game
     import importlib.util
     spec=importlib.util.spec_from_file_location('stock',repo/'scripts/build_ipa_from_nsp.py')

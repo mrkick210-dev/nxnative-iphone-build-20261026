@@ -56,6 +56,8 @@ jobs:
           if [ "$MODE" = prepare ]; then
             gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern sparking-probe-result.7z --dir "$RUNNER_TEMP"
             7zz x "$RUNNER_TEMP/sparking-probe-result.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y -aos >/dev/null
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern sparking-probe.7z --dir "$RUNNER_TEMP"
+            7zz x "$RUNNER_TEMP/sparking-probe.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input/original" ExeFS/sdk -y >/dev/null
           fi
           git clone --no-checkout https://github.com/seedds/nxnative.git "$RUNNER_TEMP/nxnative"
           git -C "$RUNNER_TEMP/nxnative" checkout 15805ef52578afe54196504e3f98e15a22221664
