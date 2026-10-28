@@ -75,5 +75,6 @@ jobs:
             cp "$RUNNER_TEMP/stage.log" "$RUNNER_TEMP/$NAME"
             test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
             7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/$NAME.7z" "$RUNNER_TEMP/$NAME" >/dev/null
+            if [ -d "$RUNNER_TEMP/input/logs" ]; then 7zz a "-p$INPUT_PASSWORD" "$RUNNER_TEMP/$NAME.7z" "$RUNNER_TEMP/input/logs" >/dev/null; fi
             gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$NAME.7z" --repo "$GITHUB_REPOSITORY" --clobber
           fi
