@@ -16,7 +16,8 @@ with zipfile.ZipFile(root/'MemoryRequest.ipa') as z:
             dest=root/'ios'/n[len(app+'/msl/'):];dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(n));shaders.append(dest)
     for name in ['c1_full.tsv','cb_extent.tsv','shader_map.tsv','shader_pairs.tsv','pso_pairs.tsv']:
         (profile/name).write_bytes(z.read(app+'/dm/'+name))
-assert len([p for p in shaders if p.name.endswith('_b.metallib')])==13599
+assert len([p for p in shaders if p.name.endswith('_b.json')])==13599
+assert len([p for p in shaders if p.name.endswith('.metallib')])==16120
 from sparking_adapt import apply as memory_adapt
 from sparking_ssl_fix import apply as ssl_adapt
 memory_adapt(repo,profile);ssl_adapt(repo)
