@@ -1,0 +1,51 @@
+name: Sparking ZERO code compatibility check
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      NX_SOURCE_COMMIT: 15805ef52578afe54196504e3f98e15a22221664
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Prepare existing build tools
+        run: |
+          brew install sevenzip
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lz4 capstone fonttools backports.zstd
+          git clone --no-checkout https://github.com/seedds/nxnative.git "$RUNNER_TEMP/nxnative"
+          git -C "$RUNNER_TEMP/nxnative" checkout "$NX_SOURCE_COMMIT"
+      - name: Fetch approved encrypted code bundle
+        run: |
+          set -euo pipefail
+          test "$(gh release view sparking-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download sparking-build-input --repo "$GITHUB_REPOSITORY" --pattern sparking-probe.7z --dir "$RUNNER_TEMP"
+          echo '49203f5b76db178cfc95641b40497a82c4be43c60d07b768de4840f437895a0c  '"$RUNNER_TEMP/sparking-probe.7z" | shasum -a 256 -c -
+          7zz x "$RUNNER_TEMP/sparking-probe.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+      - name: Check code and memory layout
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" sparking_probe.py "$RUNNER_TEMP/nxnative" "$RUNNER_TEMP/input" > "$RUNNER_TEMP/probe.log" 2>&1
+      - name: Save encrypted compatibility result
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/result"
+          cp "$RUNNER_TEMP/probe.log" "$RUNNER_TEMP/result/" 2>/dev/null || true
+          for name in probe-result.json profiles logs; do
+            if [ -e "$RUNNER_TEMP/input/$name" ]; then cp -R "$RUNNER_TEMP/input/$name" "$RUNNER_TEMP/result/"; fi
+          done
+          cd "$RUNNER_TEMP/result"
+          7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/sparking-probe-result.7z" . >/dev/null
+          test "$(gh release view sparking-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload sparking-build-input "$RUNNER_TEMP/sparking-probe-result.7z" --repo "$GITHUB_REPOSITORY" --clobber
