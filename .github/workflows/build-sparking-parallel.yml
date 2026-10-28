@@ -1,0 +1,45 @@
+name: Build Sparking ZERO in parallel
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: xcode-27
+        options:
+          - macos-26
+          - xcode-27
+permissions:
+  contents: write
+concurrency:
+  group: sparking-parallel-${{ inputs.runner }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    uses: ./.github/workflows/sparking-stage.yml
+    with:
+      mode: prepare
+      asset: sparking-inputs.7z
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+  shaders:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3]
+    uses: ./.github/workflows/sparking-stage.yml
+    with:
+      mode: shard
+      asset: parallel-inputs.7z
+      shard: ${{ matrix.shard }}
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+  merge:
+    needs: shaders
+    uses: ./.github/workflows/sparking-stage.yml
+    with:
+      mode: merge
+      asset: parallel-inputs.7z
+      runner: ${{ inputs.runner }}
+    secrets: inherit
