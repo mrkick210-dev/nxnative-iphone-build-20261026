@@ -15,6 +15,10 @@ jobs:
         run: |
           git clone --no-checkout https://github.com/powzix/ooz.git decoder
           git -C decoder checkout 05038060aa68f9187ae9923b2388ca8db40e58d1
+          $source = Get-Content decoder/kraken.cpp -Raw
+          $end = $source.IndexOf('typedef int WINAPI OodLZ_CompressFunc')
+          if ($end -lt 0) { throw 'Unexpected decoder source layout' }
+          $source.Substring(0,$end) | Set-Content decoder/kraken.cpp
           @'
           #include "stdafx.h"
           int Kraken_Decompress(const byte*, size_t, byte*, size_t);
