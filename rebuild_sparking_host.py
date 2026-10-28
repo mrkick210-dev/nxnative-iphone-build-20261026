@@ -21,6 +21,25 @@ assert len([p for p in shaders if p.name.endswith('.metallib')])==16120
 from sparking_adapt import apply as memory_adapt
 from sparking_ssl_fix import apply as ssl_adapt
 memory_adapt(repo,profile);ssl_adapt(repo)
+if os.environ.get('MOVIE_COLOR_FIX')=='1':
+    from sparking_movie_fix import apply as movie_adapt,HELPER
+    movie_adapt(repo)
+    test=root/'movie_color_test.c'
+    test.write_text('#include <stdint.h>\n#include <stddef.h>\n#include <string.h>\n#include <assert.h>\n'+HELPER+'''
+int main(void) {
+ const uint8_t src[24]={10,20,30,40,50,60,70,80,0,0,0,0,90,100,110,120,130,140,150,160,0,0,0,0};
+ uint8_t out[16]={0};
+ md_copy_bgra(out,8,src,12,2,2,0);
+ const uint8_t expected[16]={30,20,10,40,70,60,50,80,110,100,90,120,150,140,130,160};
+ assert(memcmp(out,expected,16)==0 && src[0]==10);
+ md_copy_bgra(out,4,src,12,1,2,1);
+ assert(out[0]==30 && out[2]==10 && out[3]==255 && out[4]==110 && out[7]==255);
+ return 0;
+}
+''')
+    run(['clang','-std=c11','-Wall','-Wextra','-Werror',test,'-o',root/'movie_color_test'])
+    run([root/'movie_color_test'])
+    print('BGRA/BGRX channel order, alpha, crop, and row-stride checks passed.',flush=True)
 run([sys.executable,repo/'dm/gfx/tools/dmsh_chain.py','--header'])
 # Exercise the exact modified context functions before building the app.
 source=(repo/'dm/host/hle_net.c').read_text();functions=[]
@@ -57,5 +76,6 @@ env.update(W=str(root/'ipa-work'),PATCHED=str(root/'patched'),ROMFS=str(root/'da
 run(['bash',repo/'dm/ios/tools/build_ipa.sh',root/'Shell.ipa'])
 (root/'Shell.sha256').write_text(hashlib.file_digest((root/'Shell.ipa').open('rb'),'sha256').hexdigest()+'  Shell.ipa\n')
 run([sys.executable,Path(__file__).with_name('memory_request.py'),root])
-run(['7zz','a','-t7z','-mx=1','-mhe=on','-p'+env['INPUT_PASSWORD'],root/'ssl-startup-result.7z','MemoryRequest.ipa','MemoryRequest.sha256'],cwd=root,stdout=subprocess.DEVNULL)
-run(['gh','release','upload','sparking-build-input',root/'ssl-startup-result.7z','--repo',env['GITHUB_REPOSITORY'],'--clobber'])
+asset='movie-color-result.7z' if os.environ.get('MOVIE_COLOR_FIX')=='1' else 'ssl-startup-result.7z'
+run(['7zz','a','-t7z','-mx=1','-mhe=on','-p'+env['INPUT_PASSWORD'],root/asset,'MemoryRequest.ipa','MemoryRequest.sha256'],cwd=root,stdout=subprocess.DEVNULL)
+run(['gh','release','upload','sparking-build-input',root/asset,'--repo',env['GITHUB_REPOSITORY'],'--clobber'])

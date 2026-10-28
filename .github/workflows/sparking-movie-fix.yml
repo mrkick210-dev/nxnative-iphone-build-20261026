@@ -1,0 +1,60 @@
+name: Sparking ZERO movie color fix
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: xcode-27
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      RELEASE_TAG: sparking-build-input
+      BUNDLE_ASSET: parallel-inputs.7z
+      MODE: movie-fix
+      MOVIE_COLOR_FIX: 1
+      SHARD: -1
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew install xcodegen sevenzip
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lz4 capstone fonttools backports.zstd
+          if ! xcrun -sdk iphoneos metal --version; then xcodebuild -downloadComponent MetalToolchain; fi
+      - name: Fetch verified encrypted inputs and pinned source
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BUNDLE_ASSET" --dir "$RUNNER_TEMP"
+          7zz x "$RUNNER_TEMP/$BUNDLE_ASSET" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern result-parallel.7z --dir "$RUNNER_TEMP"
+          7zz x "$RUNNER_TEMP/result-parallel.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          git clone --no-checkout https://github.com/seedds/nxnative.git "$RUNNER_TEMP/nxnative"
+          git -C "$RUNNER_TEMP/nxnative" checkout 15805ef52578afe54196504e3f98e15a22221664
+      - name: Compile and verify stage
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/venv/bin/python" rebuild_sparking_host.py "$RUNNER_TEMP/nxnative" "$RUNNER_TEMP/input" 2>&1 | tee "$RUNNER_TEMP/stage.log"
+      - name: Save stage diagnostics unpublished
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/stage.log" ]; then
+            NAME="parallel-$MODE-$SHARD.log"
+            if [ "$MODE" = merge ]; then NAME=build-parallel.log; fi
+            cp "$RUNNER_TEMP/stage.log" "$RUNNER_TEMP/$NAME"
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+            7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/$NAME.7z" "$RUNNER_TEMP/$NAME" >/dev/null
+            if [ -d "$RUNNER_TEMP/input/logs" ]; then 7zz a "-p$INPUT_PASSWORD" "$RUNNER_TEMP/$NAME.7z" "$RUNNER_TEMP/input/logs" >/dev/null; fi
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$NAME.7z" --repo "$GITHUB_REPOSITORY" --clobber
+          fi
