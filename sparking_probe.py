@@ -17,6 +17,8 @@ spec=importlib.util.spec_from_file_location('stock_build',repo/'scripts/build_ip
 stock.PROG.mode='off'
 F=pg.facts_of(data/'ExeFS',data/'romfs_manifest.tsv')
 stock.write_profile(profile,int(gameid,16),{'F':F,'name':'DRAGON BALL: Sparking! ZERO','survey':'code-only compatibility check','version':'v0','display':'2.0.73'})
+from sparking_adapt import apply
+apply(repo,profile)
 g=gamemod.load(gameid);patched=root/'patched'
 report={'title_id':gameid,'display_version':'2.0.73','source_commit':os.environ.get('NX_SOURCE_COMMIT'),'full_game_assets_present':False}
 try:
@@ -28,7 +30,7 @@ try:
     text=(logs/'heap_check.log').read_text(errors='replace')
     report['reached_nnMain']='>>> nnMain' in text
     report['heap_log_tail']=text.splitlines()[-35:]
-    report['memory_profile']={k:g.get(k) for k in ['mem_reserve','mem_alias','mem_stack','app_pool','game_args']}
+    report['memory_profile']={k:g.get(k,'') for k in ['mem_reserve','mem_alias','mem_stack','app_pool','game_args']}
 except Exception as exc:
     report['error']=str(exc);traceback.print_exc()
 (root/'probe-result.json').write_text(json.dumps(report,indent=2))

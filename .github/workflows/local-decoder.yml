@@ -1,0 +1,30 @@
+name: Build local shader decoder
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Build pinned open-source decoder
+        shell: pwsh
+        run: |
+          git clone --no-checkout https://github.com/powzix/ooz.git decoder
+          git -C decoder checkout 05038060aa68f9187ae9923b2388ca8db40e58d1
+          @'
+          #include "stdafx.h"
+          int Kraken_Decompress(const byte*, size_t, byte*, size_t);
+          extern "C" __declspec(dllexport) int ooz_decode(const byte* s,size_t n,byte* d,size_t k) { return Kraken_Decompress(s,n,d,k); }
+          '@ | Set-Content decoder/wrapper.cpp
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          Set-Content compile.cmd "@call `"$dev`" -arch=x64`r`n@cd decoder`r`n@cl /nologo /O2 /MT /DNDEBUG /LD kraken.cpp bitknit.cpp lzna.cpp wrapper.cpp /link /OUT:ooz-local-decoder.dll"
+          cmd /c compile.cmd
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-FileHash decoder/ooz-local-decoder.dll -Algorithm SHA256
+          if ((gh release view sparking-build-input --repo $env:GITHUB_REPOSITORY --json isDraft --jq .isDraft) -ne 'true') { throw 'Expected draft release' }
+          gh release upload sparking-build-input decoder/ooz-local-decoder.dll --repo $env:GITHUB_REPOSITORY --clobber

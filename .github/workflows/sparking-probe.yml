@@ -42,9 +42,12 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/result"
           cp "$RUNNER_TEMP/probe.log" "$RUNNER_TEMP/result/" 2>/dev/null || true
-          for name in probe-result.json profiles logs; do
+          # Only code, diagnostics and generated profiles. No credentials or key files.
+          for name in probe-result.json profiles logs patched; do
             if [ -e "$RUNNER_TEMP/input/$name" ]; then cp -R "$RUNNER_TEMP/input/$name" "$RUNNER_TEMP/result/"; fi
           done
+          mkdir -p "$RUNNER_TEMP/result/tools"
+          if [ -f "$RUNNER_TEMP/input/tools/dmhost" ]; then cp "$RUNNER_TEMP/input/tools/dmhost" "$RUNNER_TEMP/result/tools/"; fi
           cd "$RUNNER_TEMP/result"
           7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/sparking-probe-result.7z" . >/dev/null
           test "$(gh release view sparking-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
