@@ -35,3 +35,4 @@ except Exception as exc:
     report['error']=str(exc);traceback.print_exc()
 (root/'probe-result.json').write_text(json.dumps(report,indent=2))
 print(json.dumps(report,indent=2))
+if 'error' in report:sys.exit(1)

@@ -4,8 +4,8 @@ PATCHES='''# Sparking ZERO 2.0.73: UE4 FMallocBinned3 reserves 37 GiB of sparse 
 # iPhone address-space workaround: use NXNative's existing UE4 host heap.
 # Both lazy constructor paths hold the newly allocated 0x1c38-byte object in x19.
 CUTS = {'7b53433fa04477fc8a540bd80d5ce665': [
- (0x1dd0030, '940174a3', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
- (0x1dd0548, '9401735d', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
+ (0x1dd0030, 'a3740194', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
+ (0x1dd0548, '5d730194', '1f2003d5', 'FMallocBinned3 constructor -> host allocator'),
 ]}
 OBS = {'7b53433fa04477fc8a540bd80d5ce665': [
  (0x1dd0034, 21, 'f9035293', 'Install host allocator in x19 before publishing GMalloc'),
