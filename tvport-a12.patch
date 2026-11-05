@@ -1,0 +1,58 @@
+diff --git a/dm/gfx/nvn/nvn_mtl.m b/dm/gfx/nvn/nvn_mtl.m
+index 0d57505..49249be 100644
+--- a/dm/gfx/nvn/nvn_mtl.m
++++ b/dm/gfx/nvn/nvn_mtl.m
+@@ -431,7 +431,11 @@ void mtl_init(void) {
+         g_res = nil; g_q4 = nil; g_classic = 1;
+         g_ev = [g_dev newSharedEvent];
+         g_keep = [NSMutableArray array];
++#if TARGET_OS_TV
++        MLOG("Metal device %s: classic queue for external Vulkan/GL presentation (%s)", g_dev.name.UTF8String, no4);
++#else
+         MLOG("[RED] Metal device %s has no Metal 4 (%s%s%s): the classic part only, nothing is presented (enough for a run-time shader capture)", g_dev.name.UTF8String, no4, *why ? ": " : "", why);
++#endif
+         return;
+     }
+     // BC textures are created and uploaded as BC, with no decompression path (dm/gfx/tex/README.md); without BC the first one aborts in Metal's descriptor validation mid-game
+@@ -11999,6 +12003,28 @@ uint64_t mtl_ext_tex(void *tex) {
+ // Present an external texture after the producer's event reaches ev_val (its rendering of the frame is done); returns the ticket for mtl_present_wait
+ uint64_t mtl_present_ext(uint64_t serial, double period, void *ev, uint64_t ev_val, const int crop[4]) {
+     tex_t t; memset(&t, 0, sizeof t); t.magic = MAGIC('T', 'E', 'X', 0); t.serial = serial;
++#if TARGET_OS_TV
++    // A12 has no Metal 4 queue. Vulkan/GL already render on classic queues, so
++    // present their completed external texture through the existing classic
++    // encoder. Complete the read before returning the swapchain image to its
++    // producer; otherwise ticket 0 would let the next frame overwrite it.
++    if (g_classic) { @autoreleasepool {
++        if (atomic_load(&g_present_discard)) return 0;
++        CAMetalLayer *layer = (__bridge CAMetalLayer *)front_metal_layer();
++        id<MTLTexture> src = tex_mtl(&t);
++        if (!layer || !src) return 0;
++        present_pipeline(layer.pixelFormat);
++        id<CAMetalDrawable> drawable = [layer nextDrawable];
++        if (!drawable) return 0;
++        id<MTLCommandBuffer> cb = [g_q commandBuffer];
++        if (ev && ev_val) [cb encodeWaitForEvent:(__bridge id<MTLSharedEvent>)ev value:ev_val];
++        if (!present_encode(cb, src, drawable.texture, crop)) return 0;
++        [cb presentDrawable:drawable]; [cb commit]; [cb waitUntilCompleted];
++        if (cb.error) MLOG("[RED] classic external present: %s", cb.error.localizedDescription.UTF8String);
++        g_present_n++;
++        return 0;
++    } }
++#endif
+     if (ev && !g_ext_ev) g_ext_ev = (__bridge id<MTLSharedEvent>)ev;
+     return present_enqueue(&t, period, crop, ev ? ev_val : 0);
+ }
+diff --git a/dm/ios/project_tv.yml b/dm/ios/project_tv.yml
+index 08b0307..94d4848 100644
+--- a/dm/ios/project_tv.yml
++++ b/dm/ios/project_tv.yml
+@@ -66,7 +66,7 @@ targets:
+       TARGETED_DEVICE_FAMILY: "3"
+       ENABLE_BITCODE: NO
+       GCC_C_LANGUAGE_STANDARD: gnu11
+-      OTHER_CFLAGS: $(inherited) -mcpu=apple-a15   # The host assembly contains LSE atomic instructions, which the default baseline does not accept
++      OTHER_CFLAGS: $(inherited) -mcpu=apple-a12   # LSE atomics, with an instruction baseline supported by Apple TV 4K (2nd generation)
+       CLANG_ENABLE_OBJC_ARC: YES
+       DEBUG_INFORMATION_FORMAT: dwarf
+       GCC_WARN_INHIBIT_ALL_WARNINGS: YES

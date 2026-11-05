@@ -67,6 +67,9 @@ else:
 
 project = root / 'tvport-xcode'
 derived = root / 'tvport-derived'
+compatibility_patch = Path(__file__).with_name('tvport-a12.patch')
+subprocess.run(['git', '-C', str(repo), 'apply', '--check', str(compatibility_patch)], check=True)
+subprocess.run(['git', '-C', str(repo), 'apply', str(compatibility_patch)], check=True)
 environment = root / 'game-env.txt'
 # Docked mode enables the gyro pointer on a motion-capable controller.
 environment.write_text('DM_OPMODE=1\nDM_GUEST_FILE=1\n')
