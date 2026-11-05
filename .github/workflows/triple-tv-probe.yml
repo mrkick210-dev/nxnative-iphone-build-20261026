@@ -1,0 +1,21 @@
+name: Check A12 graphics for requested TV games
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python3 triple_probe_build.py
+      - name: Keep unsigned diagnostic in unpublished draft
+        run: |
+          set -euo pipefail
+          test "$(gh release view triple-tv-build-input --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload triple-tv-build-input "$RUNNER_TEMP/tv-gpu-probe/TVGraphicsProbe.ipa" --repo "$GITHUB_REPOSITORY" --clobber
