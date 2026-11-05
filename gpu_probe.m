@@ -17,7 +17,6 @@
             id<MTLDevice> device = MTLCreateSystemDefaultDevice();
             NSMutableDictionary *report = [NSMutableDictionary dictionary];
             report[@"device"] = device.name ?: @"none";
-            report[@"metal4"] = @([device supportsFamily:MTLGPUFamilyMetal4]);
             report[@"apple7"] = @([device supportsFamily:MTLGPUFamilyApple7]);
             report[@"argument_buffer_tier"] = @(device.argumentBuffersSupport);
             report[@"bc_compression"] = @(device.supportsBCTextureCompression);
