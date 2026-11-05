@@ -35,12 +35,35 @@ g = Game(root / 'profiles' / title)
 b.PROG = b.Progress('lines')
 b.PROG.plan(4)
 b.chain_header(sys.executable, repo, env, root / 'logs')
-g = b.rewrite(sys.executable, repo, root / 'data/ExeFS', root / 'patched', env, root / 'logs', g)
-capture = b.capture_shaders(repo, root / 'data', root / 'patched', root, env, root / 'logs', g, 'vk')
-count = len(list(capture.glob('*.spv')))
-assert count > 1000, f'Incomplete shader capture: {count}'
-print(f'Base-game shader capture complete: {count} modules.', flush=True)
-ios = b.build_vk_shaders(sys.executable, repo, [capture], root / 'shaders', env, root / 'logs', g, reuse=False)
+source_revision = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+manifest_digest = hashlib.sha256((root / 'manifest.json').read_bytes()).hexdigest()
+checkpoint_file = root / 'galaxy-checkpoint.json'
+checkpoint = json.loads(checkpoint_file.read_text()) if checkpoint_file.exists() else {}
+reuse = (checkpoint.get('source_revision') == source_revision and checkpoint.get('manifest_digest') == manifest_digest
+         and all((root / 'patched' / f'{m}.patched.bin').is_file() for m in g.words('modules'))
+         and (root / 'shaders/ios/vk/vk_shaders.metallib').is_file())
+if reuse:
+    count = checkpoint['shader_modules']
+    ios = root / 'shaders/ios'
+    print(f'Reusing verified code and all {count} captured shaders.', flush=True)
+else:
+    g = b.rewrite(sys.executable, repo, root / 'data/ExeFS', root / 'patched', env, root / 'logs', g)
+    capture = b.capture_shaders(repo, root / 'data', root / 'patched', root, env, root / 'logs', g, 'vk')
+    count = len(list(capture.glob('*.spv')))
+    assert count > 3000, f'Incomplete shader capture: {count}'
+    print(f'Base-game shader capture complete: {count} modules.', flush=True)
+    ios = b.build_vk_shaders(sys.executable, repo, [capture], root / 'shaders', env, root / 'logs', g, reuse=False)
+    checkpoint_file.write_text(json.dumps({'source_revision': source_revision, 'manifest_digest': manifest_digest,
+                                         'shader_modules': count}, indent=2))
+    encrypted = root.parent / 'galaxy-tv-compiled.7z'
+    subprocess.run(['7zz', 'a', '-t7z', '-mx=1', '-mhe=on', '-p' + env['INPUT_PASSWORD'], str(encrypted),
+                    'patched', 'shaders', 'data/vk_capture', 'galaxy-checkpoint.json'], cwd=root,
+                   check=True, stdout=subprocess.DEVNULL)
+    draft = subprocess.check_output(['gh', 'release', 'view', env['RELEASE_TAG'], '--repo', env['GITHUB_REPOSITORY'],
+                                    '--json', 'isDraft', '--jq', '.isDraft'], text=True).strip()
+    assert draft == 'true'
+    subprocess.run(['gh', 'release', 'upload', env['RELEASE_TAG'], str(encrypted), '--repo',
+                    env['GITHUB_REPOSITORY'], '--clobber'], check=True)
 
 project = root / 'tvport-xcode'
 derived = root / 'tvport-derived'
@@ -55,7 +78,9 @@ env.update(W=str(root / 'tv-work'), PATCHED=str(root / 'patched'), ROMFS=str(roo
            DM_LANG='en-US', DM_ENTITLEMENTS='', DM_ENV_FILE=str(environment),
            DM_XCODE_PROJECT_DIR=str(project), DM_XCODE_DERIVED_DATA=str(derived))
 subprocess.run(['bash', str(repo / 'dm/ios/tools/build_ipa.sh'), '--prepare-xcode'], env=env, check=True)
-command = ['xcodebuild', '-project', str(project / 'DmIOS.xcodeproj'), '-scheme', 'DmIOS',
+schemes = sorted((project / 'DmIOS.xcodeproj/xcshareddata/xcschemes').glob('*.xcscheme'))
+assert len(schemes) == 1, 'Expected one generated game scheme'
+command = ['xcodebuild', '-project', str(project / 'DmIOS.xcodeproj'), '-scheme', schemes[0].stem,
            '-configuration', 'Release', '-destination', 'generic/platform=tvOS',
            '-derivedDataPath', str(derived), 'CODE_SIGNING_ALLOWED=NO',
            'CODE_SIGNING_REQUIRED=NO', 'CODE_SIGN_IDENTITY=', 'DM_COPY_GAME_RESOURCES=NO',

@@ -38,6 +38,9 @@ jobs:
           test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern galaxy-inputs.7z --dir "$RUNNER_TEMP"
           7zz x "$RUNNER_TEMP/galaxy-inputs.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern galaxy-tv-compiled.7z --dir "$RUNNER_TEMP"; then
+            7zz x "$RUNNER_TEMP/galaxy-tv-compiled.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          fi
           git clone --no-checkout https://github.com/68hctmzzjf-svg/TVPort.git "$RUNNER_TEMP/TVPort"
           git -C "$RUNNER_TEMP/TVPort" checkout 0b0c2d657d73119afe402592401d7d8861a8e691
       - name: Compile and verify the unsigned tvOS game
