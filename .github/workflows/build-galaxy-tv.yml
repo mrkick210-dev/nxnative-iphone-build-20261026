@@ -1,0 +1,63 @@
+name: Build Super Mario Galaxy for Apple TV
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: galaxy-tv-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_PASSWORD: ${{ secrets.INPUT_PASSWORD }}
+      RELEASE_TAG: galaxy-tv-build-input
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Prepare Apple TV build tools
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          brew install xcodegen zstd spirv-cross glslang sevenzip
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lz4 'capstone>=5,<6' fonttools backports.zstd
+          xcrun --sdk appletvos --show-sdk-version
+          if ! xcrun -sdk iphoneos metal --version; then xcodebuild -downloadComponent MetalToolchain; fi
+      - name: Read encrypted inputs and pinned TVPort source
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern galaxy-inputs.7z --dir "$RUNNER_TEMP"
+          7zz x "$RUNNER_TEMP/galaxy-inputs.7z" "-p$INPUT_PASSWORD" "-o$RUNNER_TEMP/input" -y >/dev/null
+          git clone --no-checkout https://github.com/68hctmzzjf-svg/TVPort.git "$RUNNER_TEMP/TVPort"
+          git -C "$RUNNER_TEMP/TVPort" checkout 0b0c2d657d73119afe402592401d7d8861a8e691
+      - name: Compile and verify the unsigned tvOS game
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/venv/bin/python" galaxy_tv_build.py "$RUNNER_TEMP/TVPort" "$RUNNER_TEMP/input" 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Save encrypted result without publishing it
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/input"
+          shasum -a 256 GalaxyTV.ipa > GalaxyTV.sha256
+          7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/galaxy-tv-result.7z" GalaxyTV.ipa GalaxyTV.sha256 build-verification.json >/dev/null
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/galaxy-tv-result.7z" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Retain encrypted build diagnostics
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/build.log" ]; then
+            7zz a -t7z -mx=1 -mhe=on "-p$INPUT_PASSWORD" "$RUNNER_TEMP/galaxy-tv-logs.7z" "$RUNNER_TEMP/build.log" "$RUNNER_TEMP/input/logs" >/dev/null
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/galaxy-tv-logs.7z" --repo "$GITHUB_REPOSITORY" --clobber
+          fi
