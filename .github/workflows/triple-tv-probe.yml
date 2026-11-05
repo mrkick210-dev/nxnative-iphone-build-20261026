@@ -5,7 +5,7 @@ permissions:
   contents: write
 jobs:
   probe:
-    runs-on: macos-26
+    runs-on: macos-15-intel
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
