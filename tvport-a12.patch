@@ -43,6 +43,22 @@ index 0d57505..49249be 100644
      if (ev && !g_ext_ev) g_ext_ev = (__bridge id<MTLSharedEvent>)ev;
      return present_enqueue(&t, period, crop, ev ? ev_val : 0);
  }
+diff --git a/dm/ios/Sources/front_ios.m b/dm/ios/Sources/front_ios.m
+index 569cd1d..5d91566 100644
+--- a/dm/ios/Sources/front_ios.m
++++ b/dm/ios/Sources/front_ios.m
+@@ -338,7 +338,10 @@ static void front_ios_audio_apply(void) { dm_audio_suspend(g_audio_bg || g_audio
+ static void front_ios_audio_watch(void) {
+     NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
+     [nc addObserverForName:AVAudioSessionInterruptionNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n) {
+-        NSUInteger type = [n.userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue], reason = [n.userInfo[AVAudioSessionInterruptionReasonKey] unsignedIntegerValue];
++        NSUInteger type = [n.userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue], reason = 0;
++#if !TARGET_OS_TV   // tvOS reports interruption type, but does not publish the iOS-only reason key.
++        reason = [n.userInfo[AVAudioSessionInterruptionReasonKey] unsignedIntegerValue];
++#endif
+         if (type == AVAudioSessionInterruptionTypeBegan) { LOG("audio session: interrupted (reason %lu)", (unsigned long)reason); g_audio_intr = 1; }
+         else {
+             LOG("audio session: interruption ended"); g_audio_intr = 0;
 diff --git a/dm/ios/project_tv.yml b/dm/ios/project_tv.yml
 index 08b0307..94d4848 100644
 --- a/dm/ios/project_tv.yml
